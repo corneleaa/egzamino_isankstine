@@ -35,3 +35,33 @@ static std::string http_get(const std::string& url) {
     }
     return response;
 }
+//JSON istraukimas
+static std::string extract_plaintext(const std::string& json) {
+    const std::string key = "\"extract\":\"";
+    size_t pos = json.find(key);
+    if (pos == std::string::npos)
+        throw std::runtime_error("JSON extract nerastas.");
+
+    pos += key.size();
+    std::string out;
+    bool escape = false;
+
+    for (size_t i = pos; i < json.size(); ++i) {
+        char c = json[i];
+        if (!escape) {
+            if (c == '\\') {
+                escape = true;
+            } else if (c == '"') {
+                break;
+            } else {
+                out.push_back(c);
+            }
+        } else {
+            if (c == 'n') out.push_back('\n');
+            else out.push_back(c);
+            escape = false;
+        }
+    }
+    return out;
+}
+
