@@ -103,45 +103,67 @@ static std::size_t count_words_in_text(const std::string& text) {
     }
     return total;
 }
+//url encode
+static std::string url_encode(CURL* curl, const std::string& s) {
+    char* enc = curl_easy_escape(curl, s.c_str(), static_cast<int>(s.size()));
+    if (!enc) throw std::runtime_error("Nepavyko URL-encode.");
+    std::string out(enc);
+    curl_free(enc);
+    return out;
+}
+// MediaWiki API URL tekstui
+static std::string wiki_extract_url(CURL* curl, const std::string& title) {
+    return "https://lt.wikipedia.org/w/api.php"
+           "?action=query&prop=extracts&explaintext=1"
+           "&format=json&formatversion=2&titles=" + url_encode(curl, title);
+}
+// URL paieška iš HTML 
+static std::string html_unescape_amp(std::string s) {
+    size_t pos = 0;
+    while ((pos = s.find("&amp;", pos)) != std::string::npos) {
+        s.replace(pos, 5, "&");
+        pos += 1;
+    }
+    return s;
+}
 
-// URL paieska (be lookbehind)
-static std::vector<std::string> extract_urls(const std::string& text) {
+static bool is_punct_to_trim(unsigned char c) {
+    return std::ispunct(c) && c != '/';
+}
+
+static std::vector<std::string> extract_urls_from_html(const std::string& html, bool external_only = true) {
     std::vector<std::string> urls;
 
-    const std::regex full_url(R"(\bhttps?://[^\s<>"'\)\]]+)");
-    const std::regex short_url(
-        R"(\b(?:www\.)?[A-Za-z0-9-]{2,}(?:\.[A-Za-z0-9-]{2,})*\.[A-Za-z]{2,}(?:/[^\s<>"'\)\]]*)?)"
-    );
+    // href="..." arba href='...'
+    const std::regex href_any(R"(href\s*=\s*["']([^"']+)["'])", std::regex::icase);
 
-    auto collect = [&](const std::regex& rx, bool email_guard) {
-        for (std::sregex_iterator it(text.begin(), text.end(), rx), end; it != end; ++it) {
-            std::string u = it->str();
-            size_t pos = it->position();
+    for (std::sregex_iterator it(html.begin(), html.end(), href_any), end; it != end; ++it) {
+        std::string u = (*it)[1].str();
 
-            if (email_guard && pos > 0 && text[pos - 1] == '@')
-                continue;
+        // Protokolo-nepriklausomos nuorodos: //example.com -> https://example.com
+        if (u.rfind("//", 0) == 0) u = "https:" + u;
 
-            while (!u.empty() && ispunct(u.back()))
-                u.pop_back();
+        // Paliekame tik pilnas http/https nuorodas
+        if (u.rfind("http://", 0) != 0 && u.rfind("https://", 0) != 0) continue;
 
-            urls.push_back(u);
+        u = html_unescape_amp(u);
+
+        while (!u.empty() && is_punct_to_trim(static_cast<unsigned char>(u.back()))) {
+            u.pop_back();
         }
-    };
 
-    collect(full_url, false);
-    collect(short_url, true);
+        if (external_only) {
+            if (u.find("wikipedia.org") != std::string::npos) continue;
+            if (u.find("wikimedia.org") != std::string::npos) continue;
+        }
+
+        urls.push_back(u);
+    }
 
     std::sort(urls.begin(), urls.end());
     urls.erase(std::unique(urls.begin(), urls.end()), urls.end());
     return urls;
 }
-// Wikipedia API URL
-static std::string wiki_api_url() {
-    return "https://lt.wikipedia.org/w/api.php"
-           "?action=query&prop=extracts&explaintext=1"
-           "&format=json&formatversion=2&titles=Feminizmas";
-}
-
 int main() {
     try {
         curl_global_init(CURL_GLOBAL_DEFAULT);
