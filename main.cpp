@@ -93,4 +93,36 @@ static std::vector<std::string> tokenize(const std::string& line) {
     if (!cur.empty()) words.push_back(to_lower_ascii(cur));
     return words;
 }
+// URL paieska (be lookbehind)
+static std::vector<std::string> extract_urls(const std::string& text) {
+    std::vector<std::string> urls;
+
+    const std::regex full_url(R"(\bhttps?://[^\s<>"'\)\]]+)");
+    const std::regex short_url(
+        R"(\b(?:www\.)?[A-Za-z0-9-]{2,}(?:\.[A-Za-z0-9-]{2,})*\.[A-Za-z]{2,}(?:/[^\s<>"'\)\]]*)?)"
+    );
+
+    auto collect = [&](const std::regex& rx, bool email_guard) {
+        for (std::sregex_iterator it(text.begin(), text.end(), rx), end; it != end; ++it) {
+            std::string u = it->str();
+            size_t pos = it->position();
+
+            if (email_guard && pos > 0 && text[pos - 1] == '@')
+                continue;
+
+            while (!u.empty() && ispunct(u.back()))
+                u.pop_back();
+
+            urls.push_back(u);
+        }
+    };
+
+    collect(full_url, false);
+    collect(short_url, true);
+
+    std::sort(urls.begin(), urls.end());
+    urls.erase(std::unique(urls.begin(), urls.end()), urls.end());
+    return urls;
+}
+
 
