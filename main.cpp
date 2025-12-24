@@ -1,1 +1,11 @@
-
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <iostream>
+#include <regex>
+#include <set>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <curl/curl.h>
