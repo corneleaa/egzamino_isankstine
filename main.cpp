@@ -5,6 +5,7 @@
 #include <regex>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,7 +16,6 @@ static size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
     out->append(ptr, size * nmemb);
     return size * nmemb;
 }
-
 static std::string http_get(const std::string& url) {
     CURL* curl = curl_easy_init();
     if (!curl) throw std::runtime_error("Nepavyko inicializuoti CURL.");
@@ -67,11 +67,12 @@ static std::string extract_plaintext(const std::string& json) {
 //teksto apdorojimas
 static bool is_word_char(unsigned char c) {
     if (c < 128) return std::isalnum(c);
-    return true; // UTF-8 baitai – laikome žodžio dalimi
+    return true; 
 }
 
 static std::string to_lower_ascii(std::string s) {
     for (char& c : s) {
+        unsigned char uc = static_cast<unsigned char>(c);
         if ((unsigned char)c < 128)
             c = static_cast<char>(std::tolower(c));
     }
@@ -93,6 +94,16 @@ static std::vector<std::string> tokenize(const std::string& line) {
     if (!cur.empty()) words.push_back(to_lower_ascii(cur));
     return words;
 }
+static std::size_t count_words_in_text(const std::string& text) {
+    std::istringstream iss(text);
+    std::string line;
+    std::size_t total = 0;
+    while (std::getline(iss, line)) {
+        total += tokenize(line).size();
+    }
+    return total;
+}
+
 // URL paieska (be lookbehind)
 static std::vector<std::string> extract_urls(const std::string& text) {
     std::vector<std::string> urls;
