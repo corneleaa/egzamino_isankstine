@@ -64,4 +64,33 @@ static std::string extract_plaintext(const std::string& json) {
     }
     return out;
 }
+//teksto apdorojimas
+static bool is_word_char(unsigned char c) {
+    if (c < 128) return std::isalnum(c);
+    return true; // UTF-8 baitai – laikome žodžio dalimi
+}
+
+static std::string to_lower_ascii(std::string s) {
+    for (char& c : s) {
+        if ((unsigned char)c < 128)
+            c = static_cast<char>(std::tolower(c));
+    }
+    return s;
+}
+
+static std::vector<std::string> tokenize(const std::string& line) {
+    std::vector<std::string> words;
+    std::string cur;
+
+    for (unsigned char c : line) {
+        if (is_word_char(c)) {
+            cur.push_back(static_cast<char>(c));
+        } else if (!cur.empty()) {
+            words.push_back(to_lower_ascii(cur));
+            cur.clear();
+        }
+    }
+    if (!cur.empty()) words.push_back(to_lower_ascii(cur));
+    return words;
+}
 
