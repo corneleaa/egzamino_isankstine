@@ -124,5 +124,45 @@ static std::vector<std::string> extract_urls(const std::string& text) {
     urls.erase(std::unique(urls.begin(), urls.end()), urls.end());
     return urls;
 }
+// Wikipedia API URL
+static std::string wiki_api_url() {
+    return "https://lt.wikipedia.org/w/api.php"
+           "?action=query&prop=extracts&explaintext=1"
+           "&format=json&formatversion=2&titles=Feminizmas";
+}
 
+int main() {
+    try {
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+
+        std::string json = http_get(wiki_api_url());
+        std::string text = extract_plaintext(json);
+
+        // issaugomas parsisiustas testas
+        std::ofstream("downloaded_text.txt") << text;
+
+        std::unordered_map<std::string, int> count;
+        std::unordered_map<std::string, std::set<int>> lines;
+
+        std::istringstream iss(text);
+        std::string line;
+        int line_no = 0;
+
+        while (std::getline(iss, line)) {
+            ++line_no;
+            for (const auto& w : tokenize(line)) {
+                ++count[w];
+                lines[w].insert(line_no);
+            }
+        }
+        std::vector<std::pair<std::string, int>> repeated;
+        for (const auto& kv : count)
+            if (kv.second > 1)
+                repeated.push_back(kv);
+
+        std::sort(repeated.begin(), repeated.end(),
+                  [](auto& a, auto& b) {
+                      if (a.second != b.second) return a.second > b.second;
+                      return a.first < b.first;
+                  });
 
