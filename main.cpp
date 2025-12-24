@@ -167,43 +167,95 @@ static std::vector<std::string> extract_urls_from_html(const std::string& html, 
 int main() {
     try {
         curl_global_init(CURL_GLOBAL_DEFAULT);
+ if (!curl) throw std::runtime_error("Nepavyko inicializuoti CURL (handle).");
+        const std::vector<std::string> titles = {
+            "Feminizmas",
+        };
 
-        std::string json = http_get(wiki_api_url());
-        std::string text = extract_plaintext(json);
+        std::string text;
+        std::size_t total_words = 0;
 
-        // issaugomas parsisiustas testas
+        for (const auto& t : titles) {
+            std::string json = http_get(wiki_extract_url(curl, t));
+            std::string part = extract_plaintext(json);
+            if (part.empty()) continue;
+            text += "\n\n=== " + t + " ===\n";
+            text += part;
+            total_words = count_words_in_text(text);
+            if (total_words >= 1000) break;
+        }
+        if (total_words < 1000) {
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            throw std::runtime_error("Nepavyko surinkti 1000 žodžių (bandyti kiti straipsniai arba tikrinti ryšį).");
+        }
+
+        // URL paieska 
+        const std::string page_url = "https://lt.wikipedia.org/wiki/Feminizmas";
+        std::string html = http_get(page_url);
+
+        // svarus url sarasas
+        auto urls = extract_urls_from_html(html, /*external_only=*/true);
+
+        // URL sarasas tekste
+        text += "\n\n=== URL (is: " + page_url + ") ===\n";
+        text += "URL skaicius: " + std::to_string(urls.size()) + "\n";
+        for (const auto& u : urls) {
+            text += u + "\n";
+        }
+        //Issaugome galutini teksta
         std::ofstream("downloaded_text.txt") << text;
+
+        // zodziu statistika + crossref 
+        std::string text_for_analysis = text;
+        {
+            const std::string marker = "\n\n=== URL (is:";
+            size_t cut = text_for_analysis.find(marker);
+            if (cut != std::string::npos) text_for_analysis = text_for_analysis.substr(0, cut);
+        }
 
         std::unordered_map<std::string, int> count;
         std::unordered_map<std::string, std::set<int>> lines;
 
-        std::istringstream iss(text);
+        std::istringstream iss(text_for_analysis);
         std::string line;
         int line_no = 0;
+        std::size_t recomputed_words = 0;
 
         while (std::getline(iss, line)) {
             ++line_no;
-            for (const auto& w : tokenize(line)) {
+            auto toks = tokenize(line);
+            recomputed_words += toks.size();
+
+            for (const auto& w : toks) {
                 ++count[w];
                 lines[w].insert(line_no);
             }
         }
-        std::vector<std::pair<std::string, int>> repeated;
-        for (const auto& kv : count)
-            if (kv.second > 1)
-                repeated.push_back(kv);
+        // zodziu skaicius ekrane 
+        std::cout << "Bendras zodziu skaicius tekste (be URL skyriaus): " << recomputed_words << "\n";
 
+        std::vector<std::pair<std::string, int>> repeated;
+        repeated.reserve(count.size());
+        for (const auto& kv : count) {
+            if (kv.second > 1) repeated.push_back(kv);
+        }
         std::sort(repeated.begin(), repeated.end(),
-                  [](auto& a, auto& b) {
+                  [](const auto& a, const auto& b) {
                       if (a.second != b.second) return a.second > b.second;
                       return a.first < b.first;
                   });
-        // zodziu ataskaita
+        // words_report.txt
         std::ofstream words("words_report.txt");
-        for (const auto& kv : repeated)
+        words << "Bendras zodziu skaicius (be URL skyriaus): " << recomputed_words << "\n";
+        words << "Zodziai, pasikartojantys > 1:\n\n";
+        for (const auto& kv : repeated) {
             words << kv.first << " : " << kv.second << "\n";
-        // Cross-reference
+        }
+        // crossref_report.txt
         std::ofstream cross("crossref_report.txt");
+        cross << "Bendras zodziu skaicius (be URL skyriaus): " << recomputed_words << "\n";
+        cross << "Cross-reference (zodis (kiekis): eilutes):\n\n";
         for (const auto& kv : repeated) {
             cross << kv.first << " (" << kv.second << "): ";
             bool first = true;
@@ -214,14 +266,15 @@ int main() {
             }
             cross << "\n";
         }
-        // URL
-        auto urls = extract_urls(text);
+        // urls_report.txt
         std::ofstream urlf("urls_report.txt");
+        urlf << "Saltinis: " << page_url << "\n";
+        urlf << "URL skaicius (is puslapio HTML, tik isoriniai http/https): " << urls.size() << "\n\n";
         for (const auto& u : urls) {
-            std::cout << u << "\n";
             urlf << u << "\n";
         }
 
+        curl_easy_cleanup(curl);
         curl_global_cleanup();
         return 0;
     } catch (const std::exception& e) {
@@ -229,6 +282,4 @@ int main() {
         return 1;
     }
 }
-
-
 
