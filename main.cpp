@@ -165,4 +165,37 @@ int main() {
                       if (a.second != b.second) return a.second > b.second;
                       return a.first < b.first;
                   });
+        // zodziu ataskaita
+        std::ofstream words("words_report.txt");
+        for (const auto& kv : repeated)
+            words << kv.first << " : " << kv.second << "\n";
+        // Cross-reference
+        std::ofstream cross("crossref_report.txt");
+        for (const auto& kv : repeated) {
+            cross << kv.first << " (" << kv.second << "): ";
+            bool first = true;
+            for (int ln : lines[kv.first]) {
+                if (!first) cross << ", ";
+                cross << ln;
+                first = false;
+            }
+            cross << "\n";
+        }
+        // URL
+        auto urls = extract_urls(text);
+        std::ofstream urlf("urls_report.txt");
+        for (const auto& u : urls) {
+            std::cout << u << "\n";
+            urlf << u << "\n";
+        }
+
+        curl_global_cleanup();
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Klaida: " << e.what() << "\n";
+        return 1;
+    }
+}
+
+
 
